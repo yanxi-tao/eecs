@@ -1,0 +1,8 @@
+*.o
+*.exe
+*.log
+*.dSYM
+
+labs
+
+.DS_Store
