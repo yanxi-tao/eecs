@@ -1,8 +1,28 @@
-*.o
+# Executables and debug files
+main
 *.exe
-*.log
 *.dSYM
+*.stackdump
 
+# Visual debugger configurations
+.vscode/
+.vs/
+*.vcxproj
+*.vcxproj.*
+*.xcodeproj/
+
+# Output files
+*.log
+*.out
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# labs
 labs
 
+# Mac
 .DS_Store
