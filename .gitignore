@@ -4,7 +4,7 @@ main
 *.dSYM
 *.stackdump
 
-# Visual debugger configurations
+# ide
 .vscode/
 .vs/
 *.vcxproj
