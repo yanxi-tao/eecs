@@ -200,60 +200,57 @@ Suit Suit_next(Suit suit) {
   }
 }
 
+// Compares two cards based on a trump suit.
+// This handles trump vs. non-trump, and the special ranking of trump cards
+// (bowers).
 bool Card_less(const Card &a, const Card &b, Suit trump) {
   bool a_is_trump = a.is_trump(trump);
   bool b_is_trump = b.is_trump(trump);
-  if (a_is_trump && !b_is_trump) {
-    return false;
-  } else if (!a_is_trump && b_is_trump) {
-    return true;
-  } else if (a_is_trump && b_is_trump) {
-    if (a.is_right_bower(trump)) {
-      return false;
-    } else if (b.is_right_bower(trump)) {
-      return true;
-    } else if (a.is_left_bower(trump)) {
-      return false;
-    } else if (b.is_left_bower(trump)) {
-      return true;
-    } else {
-      return a < b; // both are trump but not bowers, compare normally
-    }
-  } else {
-    return a < b; // both are non-trump, compare normally
+
+  // If one card is trump and the other is not, the trump card is greater.
+  if (a_is_trump != b_is_trump) {
+    return b_is_trump; // True if b is the trump card, false if a is.
   }
+
+  // If both are trump, check for bowers before comparing by rank.
+  if (a_is_trump) {
+    if (a.is_right_bower(trump))
+      return false;
+    if (b.is_right_bower(trump))
+      return true;
+    if (a.is_left_bower(trump))
+      return false;
+    if (b.is_left_bower(trump))
+      return true;
+  }
+
+  // If both are non-trump, or both are regular trump cards (not bowers),
+  // the higher rank wins.
+  return a < b;
 }
 
+// Compares two cards in the context of a trick, considering a led card and a
+// trump suit.
 bool Card_less(const Card &a, const Card &b, const Card &led_card, Suit trump) {
-  bool a_is_trump = a.is_trump(trump);
-  bool b_is_trump = b.is_trump(trump);
-  if (a_is_trump && !b_is_trump) {
-    return false;
-  } else if (!a_is_trump && b_is_trump) {
-    return true;
-  } else if (a_is_trump && b_is_trump) {
-    if (a.is_right_bower(trump)) {
-      return false;
-    } else if (b.is_right_bower(trump)) {
-      return true;
-    } else if (a.is_left_bower(trump)) {
-      return false;
-    } else if (b.is_left_bower(trump)) {
-      return true;
-    } else {
-      return a < b; // both are trump but not bowers, compare normally
-    }
-  } else { // both are non-trump
-    bool a_is_led = a.get_suit() == led_card.get_suit();
-    bool b_is_led = b.get_suit() == led_card.get_suit();
-    if (a_is_led && !b_is_led) {
-      return false;
-    } else if (!a_is_led && b_is_led) {
-      return true;
-    } else if (a_is_led && b_is_led) {
-      return a < b; // both are led, compare normally
-    } else {
-      return a < b; // both are non-trump and non-led, compare normally
-    }
+  // If trump is involved, the led card doesn't matter. Delegate to the
+  // simpler Card_less function to handle trump-vs-trump or trump-vs-nontrump.
+  if (a.is_trump(trump) || b.is_trump(trump)) {
+    return Card_less(a, b, trump);
   }
+
+  // From here, we know NEITHER card is trump.
+  // The winner is determined by who followed the led suit, then by rank.
+  const Suit led_suit = led_card.get_suit(trump);
+  bool a_follows_suit = a.get_suit(trump) == led_suit;
+  bool b_follows_suit = b.get_suit(trump) == led_suit;
+
+  // If one card followed suit and the other didn't, the one that
+  // followed suit is greater.
+  if (a_follows_suit != b_follows_suit) {
+    return b_follows_suit; // True if b followed suit, false if a did.
+  }
+
+  // If both cards followed suit, or neither did, the card with the
+  // higher rank is greater.
+  return a < b;
 }

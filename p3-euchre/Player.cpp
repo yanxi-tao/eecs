@@ -159,7 +159,8 @@ public:
     print_hand();
     std::cout << "Discard upcard: [-1]\n";
     std::cout << "Human player " << name
-              << ", please select a card to discard:\n";
+              << ", please select a card to discard:\n"
+              << std::endl;
     int index;
     std::cin >> index;
     if (index == -1) {
