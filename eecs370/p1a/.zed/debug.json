@@ -1,0 +1,19 @@
+// Project-local debug tasks
+//
+// For more documentation on how to configure debug tasks,
+// see: https://zed.dev/docs/debugger
+[
+  {
+    "label": "Project 1a",
+    "build": {
+      "command": "make",
+      "args": ["assembler"],
+      "cwd": "$ZED_WORKTREE_ROOT",
+    },
+    "adapter": "CodeLLDB",
+    "request": "launch",
+    "program": "$ZED_WORKTREE_ROOT/assembler",
+    "args": ["spec.as", "spec.mc"],
+    "cwd": "$ZED_WORKTREE_ROOT",
+  },
+]
