@@ -11,12 +11,199 @@
 
 //Every LC2K file will contain less than 1000 lines of assembly.
 #define MAXLINELENGTH 1000
+#define OP_CNT 8
+#define DIR_CNT 1
 
 int readAndParse(FILE *, char *, char *, char *, char *, char *);
 static void checkForBlankLinesInCode(FILE *inFilePtr);
 static inline int isNumber(char *);
 static inline void printHexToFile(FILE *, int);
 static int endsWith(char *, char *);
+
+// helper
+void abortWithMsg(const char *msg) {
+    fprintf(stderr, "ErrAbort: %s", msg);
+    exit(1);
+}
+
+//pass 1
+typedef struct {
+    char name[7];
+    uint32_t addr;
+} Label;
+
+typedef struct {
+    Label value[MAXLINELENGTH];
+    size_t size;
+} Labels;
+
+Labels labels = { .size = 0 };
+
+void addLabel(const char * label, uint32_t addr) {
+    if (label[0] == '\0') return; // early return if no label
+
+    // check duplicate
+    for (size_t i = 0; i < labels.size; ++i) {
+        if (strcmp(labels.value[i].name, label) == 0) {
+            abortWithMsg("Deuplicate or Invalid Label");
+            return;
+        }
+    }
+
+    // update labels
+    memcpy(labels.value[labels.size].name, label, 7);
+    labels.value[labels.size].addr = addr;
+    ++labels.size;
+    return;
+}
+
+const Label* lookup_label(const char * label) {
+    for (size_t i = 0; i < labels.size; ++i) {
+        if (strcmp(labels.value[i].name, label) == 0) {
+            return &labels.value[i];
+        }
+    }
+    // abortWithMsg("Undefined Label");
+
+    return NULL;
+}
+
+//pass 2
+
+typedef enum {
+    // ISA ops
+    OP_ADD  = 0, // 000
+    OP_NOR  = 1, // 001
+    OP_LW   = 2, // 010
+    OP_SW   = 3, // 011
+    OP_BEQ  = 4, // 100
+    OP_JALR = 5, // 101
+    OP_HALT = 6, // 110
+    OP_NOOP = 7, // 111
+
+    // ISA directive
+    DIR_FILL = 8,
+
+    // other
+    OP_INVALID = -1
+} Opcode;
+
+typedef struct {
+    const char *mnemonic;
+    Opcode opcode;
+} Op;
+
+static const Op opTable[] = {
+    {"add",  OP_ADD},
+    {"nor",  OP_NOR},
+    {"lw",   OP_LW},
+    {"sw",   OP_SW},
+    {"beq",  OP_BEQ},
+    {"jalr", OP_JALR},
+    {"halt", OP_HALT},
+    {"noop", OP_NOOP},
+
+    // directive
+    {".fill", DIR_FILL}
+};
+
+Opcode get_op(const char *str) {
+    if (str == NULL) return OP_INVALID;
+
+    for (size_t i = 0; i < OP_CNT + DIR_CNT; i++) {
+        if (strcmp(str, opTable[i].mnemonic) == 0) {
+            return opTable[i].opcode;
+        }
+    }
+
+    return OP_INVALID;
+}
+
+bool isValidReg(const char *r) {
+    if (!isNumber((char *)r) || atoi(r) < 0 || atoi(r) > 7) return false;
+    return true;
+}
+
+uint32_t assembleRType(Opcode op, const char *ra, const char *rb, const char *rd) {
+    if (!isValidReg(ra) || !isValidReg(rb) || !isValidReg(rd)) abortWithMsg("Invalid Register");
+
+    uint32_t instruct = 0;
+    instruct |= ((uint32_t)op & 0x7) << 22;
+    instruct |= ((uint32_t)atoi(ra) & 0x7) << 19;
+    instruct |= ((uint32_t)atoi(rb) & 0x7) << 16;
+    instruct |= ((uint32_t)atoi(rd) & 0x7);
+
+    return instruct;
+}
+
+uint32_t assembleIType(Opcode op, const char *ra, const char *rb, const char *offset, uint32_t pc) {
+    if (!isValidReg(ra) || !isValidReg(rb)) abortWithMsg("Invalid Register");
+
+    uint32_t instruct = 0;
+    instruct |= ((uint32_t)op & 0x7) << 22;
+    instruct |= ((uint32_t)atoi(ra) & 0x7) << 19;
+    instruct |= ((uint32_t)atoi(rb) & 0x7) << 16;
+
+    int32_t calculatedOffset = 0;
+
+    if (isNumber((char *)offset)) {
+        int32_t val = strtol(offset, NULL, 0);
+        if (val < INT16_MIN || val > INT16_MAX) abortWithMsg("Offset Overflow");
+        instruct |= ((uint32_t)val & 0xffff);
+    } else {
+        const Label* label = lookup_label(offset);
+        if (!label) abortWithMsg("Undefined Label");
+        switch (op) {
+            case OP_LW:
+            case OP_SW:
+                calculatedOffset = label->addr;
+                break;
+            case OP_BEQ:
+                calculatedOffset = (int64_t)label->addr - (int64_t)pc - 1;
+                if (calculatedOffset < INT16_MIN || calculatedOffset > INT16_MAX) {
+                    abortWithMsg("Branch offset too large");
+                }
+                break;
+            default:
+                abortWithMsg("Unreachable: Cannot use a label with this opcode");
+                break;
+        }
+        instruct |= ((uint32_t)calculatedOffset & 0xffff);
+    }
+
+    return instruct;
+}
+
+uint32_t assembleJType(Opcode op, const char *ra, const char *rb) {
+    if (!isValidReg(ra) || !isValidReg(rb)) abortWithMsg("Invalid Register");
+    uint32_t instruct = 0;
+    instruct |= ((uint32_t)op & 0x7) << 22;
+    instruct |= ((uint32_t)atoi(ra) & 0x7) << 19;
+    instruct |= ((uint32_t)atoi(rb) & 0x7) << 16;
+    return instruct;
+}
+
+uint32_t assembleOType(Opcode op) {
+    uint32_t instruct = 0;
+    instruct |= ((uint32_t)op & 0x7) << 22;
+    return instruct;
+}
+
+uint32_t assembleFill(Opcode op, const char *val) {
+    if (!isNumber((char *)val)) {
+        const Label* label = lookup_label(val);
+        if (!label) abortWithMsg("Invalid Fill Value (Undefined Label)");
+
+        return (uint32_t)label->addr;
+    }
+
+    long long data = strtoll(val, NULL, 0);
+
+    if (data < INT32_MIN || data > UINT32_MAX) {
+        abortWithMsg("Fill Value Out of Range");
+    }
+    return (uint32_t)data;
+}
 
 int
 main(int argc, char **argv)
@@ -62,31 +249,54 @@ main(int argc, char **argv)
         exit(1);
     }
 
-    /* here is an example for how to use readAndParse to read a line from
-        inFilePtr */
-    if (! readAndParse(inFilePtr, label, opcode, arg0, arg1, arg2) ) {
-        /* reached end of file */
+    //pass 1
+    uint32_t line_num = 0;
+    while (readAndParse(inFilePtr, label, opcode, arg0, arg1, arg2)) {
+        // printf("lab: %s, op: %s, 0: %s, 1: %s, 2:%s\n", label, opcode, arg0, arg1, arg2);
+        addLabel(label, line_num);
+        ++line_num;
     }
 
-    /* this is how to rewind the file ptr so that you start reading from the
-        beginning of the file */
+    //pass 2
     rewind(inFilePtr);
+    line_num = 0;
+    while (readAndParse(inFilePtr, label, opcode, arg0, arg1, arg2)) {
+        // printf("lab: %s, op: %s, 0: %s, 1: %s, 2:%s\n", label, opcode, arg0, arg1, arg2);
+        Opcode op = get_op(opcode);
+        if (op == OP_INVALID) abortWithMsg("Invalid Operation/Directive");
 
-    /* after doing a readAndParse, you may want to do the following to test the
-        opcode */
-    if (!strcmp(opcode, "add")) {
-        /* do whatever you need to do for opcode "add" */
+        uint32_t instruct;
+        switch (op) {
+            case OP_ADD:
+            case OP_NOR:
+                instruct = assembleRType(op, arg0, arg1, arg2);
+                break;
+            case OP_LW:
+            case OP_SW:
+            case OP_BEQ:
+                instruct = assembleIType(op, arg0, arg1, arg2, line_num);
+                break;
+            case OP_JALR:
+                instruct = assembleJType(op, arg0, arg1);
+                break;
+            case OP_HALT:
+            case OP_NOOP:
+                instruct = assembleOType(op);
+                break;
+            case DIR_FILL:
+                instruct = assembleFill(op, arg0);
+                break;
+            default:
+                abortWithMsg("Unreachable");
+                return 1;
+
+        }
+        printHexToFile(outFilePtr, instruct);
+        ++line_num;
     }
 
-    /* here is an example of using isNumber. "5" is a number, so this will
-       return true */
-    if(isNumber("5")) {
-        printf("It's a number\n");
-    }
-
-    /* here is an example of using printHexToFile. This will print a
-       machine code word / number in the proper hex format to the output file */
-    printHexToFile(outFilePtr, 123);
+    fclose(inFilePtr);
+    fclose(outFilePtr);
 
     return(0);
 }
@@ -212,7 +422,7 @@ isNumber(char *string)
 
 
 // Prints a machine code word in the proper hex format to the file
-static inline void 
+static inline void
 printHexToFile(FILE *outFilePtr, int word) {
     fprintf(outFilePtr, "0x%08X\n", word);
 }
