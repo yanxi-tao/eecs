@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 
-//DO NOT CHANGE THE FOLLOWING DEFINITIONS 
+//DO NOT CHANGE THE FOLLOWING DEFINITIONS
 
 // Machine Definitions
 #define MEMORYSIZE 65536 /* maximum number of words in memory (maximum number of lines in a given file)*/
@@ -20,7 +20,7 @@
 // File Definitions
 #define MAXLINELENGTH 1000 /* MAXLINELENGTH is the max number of characters we read */
 
-typedef struct 
+typedef struct
 stateStruct {
     int pc;
     int mem[MEMORYSIZE];
@@ -37,8 +37,22 @@ static inline int convertNum(int32_t);
 
 static int endsWith(char *, char *);
 
+// -----------------
 
-int 
+void abortWithMsg(const char *msg) {
+    fprintf(stderr, "ErrAbort: %s", msg);
+    exit(1);
+}
+
+// parse inst macro
+
+#define OPCODE(inst) ((inst >> 22) & 0x7)
+#define REG_A(inst) ((inst >> 19) & 0x7)
+#define REG_B(inst) ((inst >> 16) & 0x7)
+#define REG_DEST(inst) (inst & 0x7)
+#define OFF_SET(inst) (inst & 0xffff)
+
+int
 main(int argc, char **argv)
 {
     char line[MAXLINELENGTH];
@@ -75,14 +89,74 @@ main(int argc, char **argv)
             printf("mem[ %d ] 0x%08X\n", state.numMemory, state.mem[state.numMemory]);
     }
 
-    //Your code ends here! 
+    bool terminate = false;
+    while (!terminate) {
+        if (state.pc < 0 || state.pc >= MEMORYSIZE) {
+            abortWithMsg("PC at Invalid Memory Address");
+        }
+
+        uint32_t inst = state.mem[state.pc];
+        uint8_t opcode = OPCODE(inst);
+        uint8_t regA = REG_A(inst);
+        uint8_t regB = REG_B(inst);
+        uint8_t regDest = REG_DEST(inst);
+        int16_t offset = OFF_SET(inst);
+
+        if (opcode < 0 || opcode > 7) {
+            abortWithMsg("Invalid OPCODE");
+        }
+        if (regA > 7 || regA < 0 || regB > 7 || regB < 0 || regDest > 7 || regDest < 0) {
+            abortWithMsg("Invalid Register Index");
+        }
+
+        printState(&state);
+
+        int next_pc = state.pc + 1;
+
+        switch (opcode) {
+            case 0:
+                state.reg[regDest] = state.reg[regA] + state.reg[regB];
+                break;
+            case 1:
+                state.reg[regDest] = ~(state.reg[regA] | state.reg[regB]);
+                break;
+            case 2:
+                state.reg[regB] = state.mem[state.reg[regA] + offset];
+                break;
+            case 3:
+                state.mem[state.reg[regA] + offset] = state.reg[regB];
+                break;
+            case 4:
+                if (state.reg[regA] == state.reg[regB]) next_pc = state.pc + 1 + offset;
+                break;
+            case 5:
+                state.reg[regB] = state.pc + 1;
+                next_pc = state.reg[regA];
+                break;
+            case 6:
+                terminate = true;
+                break;
+            case 7:
+                break;
+            default:
+                abortWithMsg("Reached Unreachable OPCODE");
+                break;
+        }
+
+        state.numInstructionsExecuted++;
+        state.pc = next_pc;
+    }
+    printStats(&state);
+    printState(&state);
+    convertNum(0);
+    //Your code ends here!
 
     fclose(filePtr);
     return(0);
 }
 
 /*
-* DO NOT MODIFY ANY OF THE CODE BELOW. 
+* DO NOT MODIFY ANY OF THE CODE BELOW.
 */
 
 void printState(stateType *statePtr) {
@@ -101,7 +175,7 @@ void printState(stateType *statePtr) {
 }
 
 // convert a 16-bit number into a 32-bit Linux integer
-static inline int convertNum(int num) 
+static inline int convertNum(int num)
 {
     return num - ( (num & (1<<15)) ? 1<<16 : 0 );
 }
@@ -136,5 +210,5 @@ static int endsWith(char *string, char *substr)
 }
 
 /*
-* Write any helper functions that you wish down here. 
+* Write any helper functions that you wish down here.
 */
