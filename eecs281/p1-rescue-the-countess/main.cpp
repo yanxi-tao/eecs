@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <deque>
-#include <ios>
 #include <iostream>
 #include <getopt.h>
 #include <string>
@@ -91,8 +90,7 @@ Config getOpts(int argc, char** argv) {
 
 struct Tile {
     char type = '.';
-    bool visited = false;
-
+    // '\0' means not visited else visited
     // 'n', 'e', 's', 'w' for directions, or '0'-'9' for the room number we warped from.
     char discovered_from = '\0';
 };
@@ -101,7 +99,19 @@ struct Location {
     uint32_t rm, row, col;
 };
 
-using Atlas = vector<vector<vector<Tile>>>;
+struct Atlas {
+    vector<Tile> grid;
+    uint32_t dim;
+    uint64_t sq_dim;
+
+    Atlas(uint32_t rm_cnt, uint32_t d): dim(d), sq_dim(dim * dim) {
+        grid.resize(rm_cnt * sq_dim);
+    };
+
+    inline Tile& at(uint32_t rm, uint32_t row, uint32_t col) {
+        return  grid[rm * sq_dim + row * dim + col];
+    }
+};
 
 pair<Location, Location> parseMap(Atlas &atlas, uint32_t rm_cnt, uint32_t dim) {
     string line;
@@ -112,21 +122,25 @@ pair<Location, Location> parseMap(Atlas &atlas, uint32_t rm_cnt, uint32_t dim) {
     Location end;
 
     while(cin >> line) {
+        // check for comment, if so, skip by eating rest of line
         if (line.substr(0, 2) == "//") {
             string junk;
             getline(cin, junk);
             continue;
         }
 
+        // check for excessive room
         if (rm >= rm_cnt) {
             cerr << "Too many rows in input!" << endl;
             exit(1);
         }
 
+        // check row length
         if (line.length() != dim) {
-                cerr << "Map line length does not match dimension!" << endl;
-                exit(1);
+            cerr << "Map line length does not match dimension!" << endl;
+            exit(1);
         }
+
         uint32_t col = 0;
         for (char c : line) {
             if (c == '.') {
@@ -137,7 +151,7 @@ pair<Location, Location> parseMap(Atlas &atlas, uint32_t rm_cnt, uint32_t dim) {
                     cerr << "Invalid Map Pos: " << c << endl;
                     exit(1);
                 }
-                atlas[rm][row][col] = {c};
+                atlas.at(rm, row, col) = {c};
                 if (c == 'S') start = {rm, row, col};
                 if (c == 'C') end = {rm, row, col};
             }
@@ -197,7 +211,7 @@ pair<Location, Location> parseList(Atlas &atlas, uint32_t rm_cnt, uint32_t dim) 
             exit(1);
         }
 
-        atlas[rm][row][col] = {c};
+        atlas.at(rm, row, col) = {c};
         if (c == 'S') start = {rm, row, col};
         if (c == 'C') end = {rm, row, col};
 
@@ -208,7 +222,7 @@ pair<Location, Location> parseList(Atlas &atlas, uint32_t rm_cnt, uint32_t dim) 
 bool solve(Atlas &atlas, Location start, Config &config, uint32_t rm_cnt, uint32_t dim) {
     deque<Location> search_container;
 
-    atlas[start.rm][start.row][start.col].visited = true;
+    atlas.at(start.rm, start.row, start.col).discovered_from = 'S';
     search_container.push_back(start);
 
     while (!search_container.empty()) {
@@ -221,15 +235,14 @@ bool solve(Atlas &atlas, Location start, Config &config, uint32_t rm_cnt, uint32
             search_container.pop_back();
         }
 
-        Tile &current_t = atlas[current.rm][current.row][current.col];
+        Tile &current_t = atlas.at(current.rm, current.row, current.col);
 
         if (current_t.type >= '0' and current_t.type <= '9') {
             uint32_t next_rm = (uint32_t)(current_t.type - '0');
             if (next_rm < rm_cnt) {
-                Tile &next_t = atlas[next_rm][current.row][current.col];
-                if (!next_t.visited and next_t.type != '#' and next_t.type != '!') {
+                Tile &next_t = atlas.at(next_rm, current.row, current.col);
+                if (next_t.discovered_from == '\0' and next_t.type != '#' and next_t.type != '!') {
                     Location next = {next_rm, current.row, current.col};
-                    next_t.visited = true;
                     next_t.discovered_from = (char)(current.rm + '0');
                     if (next_t.type == 'C') return true;
                     search_container.push_back(next);
@@ -244,9 +257,8 @@ bool solve(Atlas &atlas, Location start, Config &config, uint32_t rm_cnt, uint32
                 int64_t next_r = (int64_t)current.row + d_row[i];
                 int64_t next_c = (int64_t)current.col + d_col[i];
                 if (next_r >= 0 and next_r < (int64_t)dim and next_c >= 0 and next_c < (int64_t)dim) {
-                    Tile &neighbor = atlas[current.rm][(uint32_t)next_r][(uint32_t)next_c];
-                    if (!neighbor.visited and neighbor.type != '#' and neighbor.type != '!') {
-                        neighbor.visited = true;
+                    Tile &neighbor = atlas.at(current.rm, (uint32_t)next_r, (uint32_t)next_c);
+                    if (neighbor.discovered_from == '\0' and neighbor.type != '#' and neighbor.type != '!') {
                         neighbor.discovered_from = dir[i];
 
                         if (neighbor.type == 'C') return true;
@@ -267,10 +279,10 @@ void reconstructPath(Atlas &atlas, Location start, Location end) {
     char dir[] = { 'n', 'e', 's', 'w'};
 
     while (!(current.rm == start.rm and current.row == start.row and current.col == start.col)) {
-        Tile &current_t = atlas[current.rm][current.row][current.col];
+        Tile &current_t = atlas.at(current.rm, current.row, current.col);
         if (current_t.discovered_from >= '0' and current_t.discovered_from <= '9') {
             uint32_t prev_rm = (uint32_t)(current_t.discovered_from - '0');
-            Tile &prev_t = atlas[prev_rm][current.row][current.col];
+            Tile &prev_t = atlas.at(prev_rm, current.row, current.col);
             prev_t.type = 'p';
             current = {prev_rm, current.row, current.col};
         } else {
@@ -278,7 +290,7 @@ void reconstructPath(Atlas &atlas, Location start, Location end) {
                 if (current_t.discovered_from == dir[i]) {
                     int64_t prev_r = (int64_t)current.row - d_row[i];
                     int64_t prev_c = (int64_t)current.col - d_col[i];
-                    Tile &prev_t = atlas[current.rm][(uint32_t)prev_r][(uint32_t)prev_c];
+                    Tile &prev_t = atlas.at(current.rm, (uint32_t)prev_r, (uint32_t)prev_c);
                     prev_t.type = current_t.discovered_from;
                     current = {current.rm, (uint32_t)prev_r, (uint32_t)prev_c};
                     break;
@@ -298,7 +310,7 @@ int main(int argc, char *argv[]) {
     uint32_t dim;
     cin >> in_type >> rm_cnt >> dim;
 
-    Atlas atlas(rm_cnt, vector<vector<Tile>>(dim, vector<Tile>(dim)));
+    Atlas atlas(rm_cnt, dim);
 
 
     Location start, end;
@@ -314,28 +326,22 @@ int main(int argc, char *argv[]) {
 
     if (!solve(atlas, start, config, rm_cnt, dim)) {
         uint32_t tile_cnt = 0;
-        for (auto &rm : atlas) {
-            for (auto &row : rm) {
-                for (auto &tile : row) {
-                    if (tile.visited) ++tile_cnt;
-                }
-            }
+        for (auto &tile : atlas.grid) {
+            if (tile.discovered_from != '\0') ++tile_cnt;
         }
         cout << "No solution, " << tile_cnt << " tiles discovered." << endl;
     } else {
         reconstructPath(atlas, start, end);
         if (config.format == OFomat::Map) {
-            uint32_t rm_iter_cnt = 0;
             cout << "Start in room " << start.rm << ", row " << start.row << ", column " << start.col << "\n";
-            for (auto &rm : atlas) {
-                cout << "//castle room " << rm_iter_cnt << "\n";
-                for (auto &row : rm) {
-                    for (auto &c : row) {
-                        cout << c.type;
+            for (uint32_t rm = 0; rm < rm_cnt; ++rm) {
+                cout << "//castle room " << rm << "\n";
+                for (uint32_t row = 0; row < dim; ++row) {
+                    for (uint32_t col = 0; col < dim; ++col) {
+                        cout << atlas.at(rm, row, col).type;
                     }
                     cout << endl;
                 }
-                ++rm_iter_cnt;
             }
         } else {
             cout << "Path taken:\n";
@@ -346,7 +352,7 @@ int main(int argc, char *argv[]) {
             char dir[] = { 'n', 'e', 's', 'w'};
 
             while (!(current.rm == end.rm and current.row == end.row and current.col == end.col)) {
-                Tile &current_t = atlas[current.rm][current.row][current.col];
+                Tile &current_t = atlas.at(current.rm, current.row, current.col);
                 cout << "(" << current.rm << "," << current.row << "," << current.col << "," << current_t.type << ")" << endl;
 
                 if (current_t.type == 'p') {
@@ -354,7 +360,7 @@ int main(int argc, char *argv[]) {
                         // Optimization: Skip current room
                         if (r == current.rm) continue;
 
-                        if (atlas[r][current.row][current.col].discovered_from == (char)(current.rm + '0')) {
+                        if (atlas.at(r, current.row, current.col).discovered_from == (char)(current.rm + '0')) {
                             current.rm = r;
                             break;
                         }
