@@ -1,0 +1,10 @@
+M
+1
+5
+// Minion avoidance test
+// Room 0
+S....
+.!!!.
+.!C!.
+.!!!.
+.....

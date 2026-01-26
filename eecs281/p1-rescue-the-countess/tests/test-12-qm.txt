@@ -1,0 +1,15 @@
+M
+3
+3
+// Room 0: Start, Pipe to 1
+S..
+...
+..1
+// Room 1: Land at (2,2), walk to Pipe to 2 at (0,0)
+2..
+.#.
+...
+// Room 2: Land at (0,0), C at (2,2)
+...
+.#.
+..C

@@ -1,0 +1,11 @@
+M
+1
+6
+// Backtracking test for Stack
+// Room 0
+S#####
+......
+#.####
+......
+####.#
+C.....

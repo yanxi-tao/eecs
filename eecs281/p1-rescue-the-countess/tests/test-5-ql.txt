@@ -1,0 +1,9 @@
+M
+1
+4
+// No solution test case
+// Room 0
+S#..
+##..
+....
+...C

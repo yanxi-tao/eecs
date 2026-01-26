@@ -1,0 +1,12 @@
+M
+2
+3
+// Warp pipe test + Invalid pipe target
+// Room 0
+S.1
+###
+...
+// Room 1
+...
+#.#
+C.5
