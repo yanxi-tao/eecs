@@ -33,9 +33,9 @@ public:
     template<typename InputIterator>
     SortedPQ(InputIterator start, InputIterator end, COMP_FUNCTOR comp = COMP_FUNCTOR())
         : BaseClass { comp } {
-        // TODO: Implement this function
-        (void)start;  // Delete this line when you implement this function
-        (void)end;  // Delete this line when you implement this function
+
+        data.assign(start, end);
+        updatePriorities();
     }  // SortedPQ
 
 
@@ -59,8 +59,8 @@ public:
     // Description: Add a new element to the PQ.
     // Runtime: O(n)
     virtual void push(const TYPE &val) {
-        // TODO: Implement this function
-        (void)val;  // Delete this line when you implement this function
+        auto iter = std::lower_bound(data.begin(), data.end(), val, this->compare);
+        data.insert(iter, val);
     }  // push()
 
 
@@ -71,7 +71,7 @@ public:
     // familiar with them, you do not need to use exceptions in this project.
     // Runtime: Amortized O(1)
     virtual void pop() {
-        // TODO: Implement this function
+        data.pop_back();
     }  // pop()
 
 
@@ -81,11 +81,7 @@ public:
     //              might make it no longer be the most extreme element.
     // Runtime: O(1)
     virtual const TYPE &top() const {
-        // TODO: Implement this function
-
-        // These lines are present only so that this provided file compiles.
-        static TYPE temp;  // TODO: Delete this line
-        return temp;  // TODO: Delete or change this line
+        return data.back();
     }  // top()
 
 
@@ -105,7 +101,7 @@ public:
     //              'rebuilds' the PQ by fixing the PQ invariant.
     // Runtime: O(n log n)
     virtual void updatePriorities() {
-        // TODO: Implement this function
+        std::sort(data.begin(), data.end(), this->compare);
     }  // updatePriorities()
 
 

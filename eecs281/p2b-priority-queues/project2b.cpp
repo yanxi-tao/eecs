@@ -1,4 +1,4 @@
-// Project identifier: 43DE0E0C4C76BFAA6D8C2F5AEAE0518A9C251F4E
+// Project identifier: 43DE0E0C4C76BFAA6D8C2F5AEAE0518A9C262F4E
 
 /*
  * Compile this test against your .h files to make sure they compile. We
@@ -30,6 +30,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <random>
 
 #include "BinaryPQ.hpp"
 #include "Eecs281PQ.hpp"
@@ -93,7 +94,17 @@ void testPrimitiveOperations() {
     assert(eecsPQ.size() == 0);  // NOLINT: Explicit test for size == 0
     assert(eecsPQ.empty());
 
-    // TODO: Add more testing here!
+    const int num_elements = 100;
+    for (int i = 0; i < num_elements; ++i) {
+        eecsPQ.push(i);
+    }
+    assert(eecsPQ.size() == num_elements);
+
+    for (int i = num_elements - 1; i >= 0; --i) {
+        assert(eecsPQ.top() == i);
+        eecsPQ.pop();
+    }
+    assert(eecsPQ.empty());
 
     std::cout << "testPrimitiveOperations succeeded!" << std::endl;
 } // testPrimitiveOperations()
@@ -104,23 +115,31 @@ void testPrimitiveOperations() {
 template <template <typename...> typename PQ>
 void testHiddenData() {
     struct HiddenData {
+        int cost;
         int data;
     }; // HiddenData structure
 
     struct HiddenDataComp {
         bool operator()(const HiddenData &a, const HiddenData &b) const {
-            // TODO: Finish this comparator
-            (void)a;  // Delete this line when you finish this function
-            (void)b;  // Delete this line when you finish this function
-            return false;
+            return a.cost < b.cost;
         } // operator()()
     }; // comparator
 
     std::cout << "Testing with hidden data..." << std::endl;
 
-    // TODO: Add code here to actually test with the HiddenData type.
-    // Consider writing this code in the style of testPrimitiveOperations
-    // above.
+    PQ<HiddenData, HiddenDataComp> pq;
+    Eecs281PQ<HiddenData, HiddenDataComp>& eecsPQ = pq;
+
+    eecsPQ.push({10, 1});
+    eecsPQ.push({30, 2}); // Should be top
+    eecsPQ.push({20, 3});
+
+    assert(eecsPQ.top().data == 2);
+    eecsPQ.pop();
+    assert(eecsPQ.top().data == 3);
+    eecsPQ.pop();
+    assert(eecsPQ.top().data == 1);
+    eecsPQ.pop();
 
     std::cout << "testHiddenData succeeded!" << std::endl;
 } // testHiddenData()
@@ -129,30 +148,33 @@ void testHiddenData() {
 // Test the last public member function of Eecs281PQ, updatePriorities
 template <template <typename...> typename PQ>
 void testUpdatePriorities() {
-    std::vector<int> data {
-        1,
-        5,  // NOLINT: Some non-trivial number needed here
-    };
+    std::vector<int> data;
+    for(int i=0; i<10; ++i) data.push_back(i);
 
     PQ<const int *, IntPtrComp> pq {};
     Eecs281PQ<const int *, IntPtrComp> &eecsPQ = pq;
 
-    // NOTE: If you add more data to the vector, don't push the pointers
-    //   until AFTER the vector stops changing size! Think about why.
     for (auto &datum : data) {
         eecsPQ.push(&datum);
-    } // for
+    }
 
-    // Change some element in data (which is pointed to by an element in pq).
-    // This new value should be higher than any other so its address will
-    // wind qt the top adter updatePriorities.
-    auto &datum = data[0];
-    datum = 10;  // NOLINT: Some non-trivial number needed here
+    // Current top should be 9
+    assert(*eecsPQ.top() == 9);
+
+    // Modify data[0] (originally 0) to be 50 (new max)
+    data[0] = 50;
+    // Modify data[1] (originally 1) to be 20 (middle)
+    data[1] = 20;
+
+    // The PQ is now technically invalid (heap invariant broken).
+    // updatePriorities should scan all elements and rebuild the heap.
     eecsPQ.updatePriorities();
-    assert(*eecsPQ.top() == 10);
-    assert(eecsPQ.top() == &datum);
 
-    // TODO: Add more testing here as you see fit.
+    assert(*eecsPQ.top() == 50);
+    eecsPQ.pop();
+    assert(*eecsPQ.top() == 20); // The second modified value
+    eecsPQ.pop();
+    assert(*eecsPQ.top() == 9);  // The old max
 } // testUpdatePriorities()
 
 
@@ -206,6 +228,55 @@ void testPairing() {
     std::cout << "testPairing succeeded!" << std::endl;
 } // testPairing()
 
+template <template <typename...> typename PQ>
+void testFuzzing() {
+    std::cout << "Running Fuzzing/Stress Test..." << std::endl;
+
+    PQ<int> pq;
+    std::vector<int> expected;
+
+    // Random number generator
+    std::mt19937 rng(42); // Fixed seed for reproducibility
+    std::uniform_int_distribution<int> dist(1, 10000);
+
+    const int OPS = 2000;
+
+    for(int i = 0; i < OPS; ++i) {
+        int op = dist(rng) % 10;
+
+        if (op < 6) {
+            // 60% chance to push
+            int val = dist(rng);
+            pq.push(val);
+            expected.push_back(val);
+            std::push_heap(expected.begin(), expected.end());
+        } else {
+            // 40% chance to pop
+            if (!pq.empty()) {
+                assert(!expected.empty());
+
+                // Verify Top
+                assert(pq.top() == expected.front());
+
+                // Pop
+                pq.pop();
+                std::pop_heap(expected.begin(), expected.end());
+                expected.pop_back();
+            }
+        }
+        assert(pq.size() == expected.size());
+    }
+
+    // Empty the rest
+    while(!pq.empty()) {
+        assert(pq.top() == expected.front());
+        pq.pop();
+        std::pop_heap(expected.begin(), expected.end());
+        expected.pop_back();
+    }
+
+    std::cout << "testFuzzing succeeded!" << std::endl;
+}
 
 // Run all tests for a particular PQ type.
 template <template <typename...> typename PQ>
@@ -213,6 +284,7 @@ void testPriorityQueue() {
     testPrimitiveOperations<PQ>();
     testHiddenData<PQ>();
     testUpdatePriorities<PQ>();
+    testFuzzing<PQ>();
 } // testPriorityQueue()
 
 // PairingPQ has some extra behavior we need to test in updateElement.
@@ -224,6 +296,7 @@ void testPriorityQueue<PairingPQ>() {
     testHiddenData<PairingPQ>();
     testUpdatePriorities<PairingPQ>();
     testPairing();
+    testFuzzing<PairingPQ>();
 } // testPriorityQueue<PairingPQ>()
 
 
@@ -253,6 +326,15 @@ int main() {
     switch (pqType) {
     case PQType::Unordered:
         testPriorityQueue<UnorderedPQ>();
+        break;
+    case PQType::Sorted:
+        testPriorityQueue<SortedPQ>();
+        break;
+    case PQType::Binary:
+        testPriorityQueue<BinaryPQ>();
+        break;
+    case PQType::Pairing:
+        testPriorityQueue<PairingPQ>();
         break;
     default:
         std::cout << "Unrecognized PQ type " << pqType << " in main.\n"
