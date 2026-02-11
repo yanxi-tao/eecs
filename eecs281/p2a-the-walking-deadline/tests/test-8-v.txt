@@ -1,0 +1,15 @@
+# Skipped Rounds Test
+quiver-capacity: 0
+random-seed: 1
+max-rand-distance: 20
+max-rand-speed: 5
+max-rand-health: 5
+---
+round: 1
+random-zombies: 0
+named-zombies: 1
+Walker distance: 10 speed: 1 health: 100
+---
+round: 10
+random-zombies: 0
+named-zombies: 0

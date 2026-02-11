@@ -1,0 +1,13 @@
+# Priority Queue Tie Breaker Test: ETA -> Health -> Name (Case Sensitive)
+quiver-capacity: 1
+random-seed: 12345
+max-rand-distance: 100
+max-rand-speed: 100
+max-rand-health: 100
+---
+round: 1
+random-zombies: 0
+named-zombies: 3
+apple distance: 5 speed: 1 health: 1
+Aaron distance: 5 speed: 1 health: 1
+Zack  distance: 5 speed: 1 health: 1

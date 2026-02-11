@@ -1,0 +1,13 @@
+# Stats Sorting Test
+quiver-capacity: 10
+random-seed: 10
+max-rand-distance: 10
+max-rand-speed: 10
+max-rand-health: 1
+---
+round: 1
+random-zombies: 0
+named-zombies: 3
+Z_Alpha distance: 1 speed: 10 health: 1
+Z_Beta distance: 1 speed: 10 health: 1
+Z_Gamma distance: 2 speed: 1 health: 1

@@ -1,0 +1,14 @@
+# Priority Queue Tie-Breaker Test
+quiver-capacity: 1
+random-seed: 10
+max-rand-distance: 100
+max-rand-speed: 10
+max-rand-health: 10
+---
+round: 1
+random-zombies: 0
+named-zombies: 4
+ZombieA distance: 10 speed: 2 health: 100
+ZombieB distance: 10 speed: 2 health: 10
+ZombieC distance: 20 speed: 4 health: 50
+ZombieD distance: 20 speed: 4 health: 50

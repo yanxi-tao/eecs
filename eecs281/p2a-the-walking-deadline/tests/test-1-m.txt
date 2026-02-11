@@ -1,0 +1,17 @@
+# Median Test: Checks lifetime calculation (DeathRound - CreateRound + 1) and integer division
+quiver-capacity: 1
+random-seed: 10
+max-rand-distance: 10
+max-rand-speed: 10
+max-rand-health: 10
+---
+round: 1
+random-zombies: 0
+named-zombies: 2
+FastDie distance: 10 speed: 1 health: 1
+SlowDie distance: 10 speed: 1 health: 2
+---
+round: 3
+random-zombies: 0
+named-zombies: 1
+LateArriver distance: 5 speed: 5 health: 1

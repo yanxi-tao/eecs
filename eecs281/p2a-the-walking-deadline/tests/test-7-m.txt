@@ -1,0 +1,13 @@
+# Median Calculation Test
+quiver-capacity: 100
+random-seed: 42
+max-rand-distance: 10
+max-rand-speed: 10
+max-rand-health: 10
+---
+round: 1
+random-zombies: 0
+named-zombies: 3
+Z1 distance: 1 speed: 5 health: 1
+Z2 distance: 1 speed: 5 health: 1
+Z3 distance: 2 speed: 1 health: 1

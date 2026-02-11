@@ -1,0 +1,17 @@
+# Statistics and Skipped Rounds Test
+quiver-capacity: 1
+random-seed: 42
+max-rand-distance: 50
+max-rand-speed: 10
+max-rand-health: 10
+---
+round: 1
+random-zombies: 0
+named-zombies: 2
+Tank distance: 100 speed: 1 health: 2
+Weak distance: 5   speed: 1 health: 1
+---
+round: 3
+random-zombies: 0
+named-zombies: 1
+Late distance: 10 speed: 1 health: 1

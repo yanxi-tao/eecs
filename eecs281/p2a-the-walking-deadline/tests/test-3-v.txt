@@ -1,0 +1,11 @@
+# Movement Underflow Test: Speed > Distance
+quiver-capacity: 0
+random-seed: 1
+max-rand-distance: 10
+max-rand-speed: 10
+max-rand-health: 10
+---
+round: 1
+random-zombies: 0
+named-zombies: 1
+UsainBolt distance: 5 speed: 10 health: 10

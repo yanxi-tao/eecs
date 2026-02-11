@@ -1,0 +1,12 @@
+# Flexible Input Parsing Test (Abbreviated headers)
+quiver: 10
+seed: 999
+dist: 50
+speed: 50
+health: 50
+---
+round: 1
+random: 0
+named: 2
+Z1 dist: 10 speed: 1 health: 1
+Z2 dist: 10 speed: 1 health: 1
