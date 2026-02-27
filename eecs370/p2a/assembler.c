@@ -1,90 +1,128 @@
-/**
- * Project 1
- * Assembler code fragment for LC-2K
- */
-
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
-//Every LC2K file will contain less than 1000 lines of assembly.
 #define MAXLINELENGTH 1000
 #define OP_CNT 8
 #define DIR_CNT 1
 
 int readAndParse(FILE *, char *, char *, char *, char *, char *);
 static void checkForBlankLinesInCode(FILE *inFilePtr);
+static void checkForInstructionsAfterFill(FILE *inFilePtr);
 static inline int isNumber(char *);
-static inline void printHexToFile(FILE *, int);
-static int endsWith(char *, char *);
 
-// helper
+// Helper
 void abortWithMsg(const char *msg) {
-    fprintf(stderr, "ErrAbort: %s", msg);
+    fprintf(stderr, "ErrAbort: %s\n", msg);
     exit(1);
 }
 
-//pass 1
-typedef struct {
-    char name[7];
-    uint32_t addr;
-} Label;
-
-typedef struct {
-    Label value[MAXLINELENGTH];
-    size_t size;
-} Labels;
-
-Labels labels = { .size = 0 };
-
-void addLabel(const char * label, uint32_t addr) {
-    if (label[0] == '\0') return; // early return if no label
-
-    // check duplicate
-    for (size_t i = 0; i < labels.size; ++i) {
-        if (strcmp(labels.value[i].name, label) == 0) {
-            abortWithMsg("Deuplicate or Invalid Label");
-            return;
-        }
-    }
-
-    // update labels
-    memcpy(labels.value[labels.size].name, label, 7);
-    labels.value[labels.size].addr = addr;
-    ++labels.size;
-    return;
+// Check label types
+bool isGlobalLabel(const char *label) {
+    return (label[0] >= 'A' && label[0] <= 'Z');
 }
 
-const Label* lookup_label(const char * label) {
-    for (size_t i = 0; i < labels.size; ++i) {
-        if (strcmp(labels.value[i].name, label) == 0) {
-            return &labels.value[i];
+bool isLocalLabel(const char *label) {
+    return (label[0] >= 'a' && label[0] <= 'z');
+}
+
+// --- Data Structures for Object File ---
+
+typedef struct {
+    char name[7];
+    char type;      // 'T' (Text), 'D' (Data), 'U' (Undefined)
+    int offset;     // Offset relative to section start
+} SymbolTableEntry;
+
+typedef struct {
+    int offset;
+    char opcode[7];
+    char label[7];
+} RelocationEntry;
+
+SymbolTableEntry symbolTable[MAXLINELENGTH];
+int symbolTableSize = 0;
+
+RelocationEntry relocationTable[MAXLINELENGTH];
+int relocationTableSize = 0;
+
+uint32_t textSegment[MAXLINELENGTH];
+int textSize = 0;
+
+uint32_t dataSegment[MAXLINELENGTH];
+int dataSize = 0;
+
+// --- Internal Label Storage (Pass 1) ---
+
+typedef struct {
+    char name[7];
+    int offset;     // Offset relative to section start
+    char section;   // 'T' or 'D'
+} DefinedLabel;
+
+DefinedLabel localLabels[MAXLINELENGTH];
+int localLabelCount = 0;
+
+void addDefinedLabel(const char *label, int offset, char section) {
+    if (label[0] == '\0') return;
+
+    // Check duplicate
+    for (int i = 0; i < localLabelCount; ++i) {
+        if (strcmp(localLabels[i].name, label) == 0) {
+            abortWithMsg("Duplicate Label Definition");
         }
     }
-    // abortWithMsg("Undefined Label");
 
+    strcpy(localLabels[localLabelCount].name, label);
+    localLabels[localLabelCount].offset = offset;
+    localLabels[localLabelCount].section = section;
+    localLabelCount++;
+}
+
+DefinedLabel* findDefinedLabel(const char *label) {
+    for (int i = 0; i < localLabelCount; ++i) {
+        if (strcmp(localLabels[i].name, label) == 0) {
+            return &localLabels[i];
+        }
+    }
     return NULL;
 }
 
-//pass 2
+// Adds a symbol to the output table if it doesn't already exist
+void addSymbolToTable(const char *name, char type, int offset) {
+    for (int i = 0; i < symbolTableSize; i++) {
+        if (strcmp(symbolTable[i].name, name) == 0) {
+            return; // Already exists
+        }
+    }
+    strcpy(symbolTable[symbolTableSize].name, name);
+    symbolTable[symbolTableSize].type = type;
+    symbolTable[symbolTableSize].offset = offset;
+    symbolTableSize++;
+}
+
+// Adds a relocation entry
+void addRelocation(int offset, const char *opcode, const char *label) {
+    relocationTable[relocationTableSize].offset = offset;
+    strcpy(relocationTable[relocationTableSize].opcode, opcode);
+    strcpy(relocationTable[relocationTableSize].label, label);
+    relocationTableSize++;
+}
+
+// --- Opcodes ---
 
 typedef enum {
-    // ISA ops
-    OP_ADD  = 0, // 000
-    OP_NOR  = 1, // 001
-    OP_LW   = 2, // 010
-    OP_SW   = 3, // 011
-    OP_BEQ  = 4, // 100
-    OP_JALR = 5, // 101
-    OP_HALT = 6, // 110
-    OP_NOOP = 7, // 111
-
-    // ISA directive
+    OP_ADD  = 0,
+    OP_NOR  = 1,
+    OP_LW   = 2,
+    OP_SW   = 3,
+    OP_BEQ  = 4,
+    OP_JALR = 5,
+    OP_HALT = 6,
+    OP_NOOP = 7,
     DIR_FILL = 8,
-
-    // other
     OP_INVALID = -1
 } Opcode;
 
@@ -102,20 +140,16 @@ static const Op opTable[] = {
     {"jalr", OP_JALR},
     {"halt", OP_HALT},
     {"noop", OP_NOOP},
-
-    // directive
     {".fill", DIR_FILL}
 };
 
 Opcode get_op(const char *str) {
     if (str == NULL) return OP_INVALID;
-
     for (size_t i = 0; i < OP_CNT + DIR_CNT; i++) {
         if (strcmp(str, opTable[i].mnemonic) == 0) {
             return opTable[i].opcode;
         }
     }
-
     return OP_INVALID;
 }
 
@@ -124,53 +158,27 @@ bool isValidReg(const char *r) {
     return true;
 }
 
+// --- Assembly Functions ---
+
 uint32_t assembleRType(Opcode op, const char *ra, const char *rb, const char *rd) {
     if (!isValidReg(ra) || !isValidReg(rb) || !isValidReg(rd)) abortWithMsg("Invalid Register");
-
     uint32_t instruct = 0;
     instruct |= ((uint32_t)op & 0x7) << 22;
     instruct |= ((uint32_t)atoi(ra) & 0x7) << 19;
     instruct |= ((uint32_t)atoi(rb) & 0x7) << 16;
     instruct |= ((uint32_t)atoi(rd) & 0x7);
-
     return instruct;
 }
 
-uint32_t assembleIType(Opcode op, const char *ra, const char *rb, const char *offset, uint32_t pc) {
+uint32_t assembleIType(Opcode op, const char *ra, const char *rb, int offset) {
     if (!isValidReg(ra) || !isValidReg(rb)) abortWithMsg("Invalid Register");
+    if (offset < INT16_MIN || offset > INT16_MAX) abortWithMsg("Offset Overflow");
 
     uint32_t instruct = 0;
     instruct |= ((uint32_t)op & 0x7) << 22;
     instruct |= ((uint32_t)atoi(ra) & 0x7) << 19;
     instruct |= ((uint32_t)atoi(rb) & 0x7) << 16;
-
-    int32_t calculatedOffset = 0;
-
-    if (isNumber((char *)offset)) {
-        int32_t val = strtol(offset, NULL, 0);
-        if (val < INT16_MIN || val > INT16_MAX) abortWithMsg("Offset Overflow");
-        instruct |= ((uint32_t)val & 0xffff);
-    } else {
-        const Label* label = lookup_label(offset);
-        if (!label) abortWithMsg("Undefined Label");
-        switch (op) {
-            case OP_LW:
-            case OP_SW:
-                calculatedOffset = label->addr;
-                break;
-            case OP_BEQ:
-                calculatedOffset = (int64_t)label->addr - (int64_t)pc - 1;
-                if (calculatedOffset < INT16_MIN || calculatedOffset > INT16_MAX) {
-                    abortWithMsg("Branch offset too large");
-                }
-                break;
-            default:
-                abortWithMsg("Unreachable: Cannot use a label with this opcode");
-                break;
-        }
-        instruct |= ((uint32_t)calculatedOffset & 0xffff);
-    }
-
+    instruct |= ((uint32_t)offset & 0xffff);
     return instruct;
 }
 
@@ -189,50 +197,25 @@ uint32_t assembleOType(Opcode op) {
     return instruct;
 }
 
-uint32_t assembleFill(Opcode op, const char *val) {
-    if (!isNumber((char *)val)) {
-        const Label* label = lookup_label(val);
-        if (!label) abortWithMsg("Invalid Fill Value (Undefined Label)");
-
-        return (uint32_t)label->addr;
-    }
-
-    long long data = strtoll(val, NULL, 0);
-
-    if (data < INT32_MIN || data > UINT32_MAX) {
-        abortWithMsg("Fill Value Out of Range");
-    }
-    return (uint32_t)data;
+uint32_t assembleFill(int value) {
+     return (uint32_t)value;
 }
 
-int
-main(int argc, char **argv)
-{
+// --- Main ---
+
+int main(int argc, char **argv) {
     char *inFileString, *outFileString;
     FILE *inFilePtr, *outFilePtr;
     char label[MAXLINELENGTH], opcode[MAXLINELENGTH], arg0[MAXLINELENGTH],
             arg1[MAXLINELENGTH], arg2[MAXLINELENGTH];
 
     if (argc != 3) {
-        printf("error: usage: %s <assembly-code-file> <machine-code-file>\n",
-            argv[0]);
+        printf("error: usage: %s <assembly-code-file> <object-file>\n", argv[0]);
         exit(1);
     }
 
     inFileString = argv[1];
     outFileString = argv[2];
-
-    if (!endsWith(inFileString, ".as") &&
-        !endsWith(inFileString, ".s") &&
-        !endsWith(inFileString, ".lc2k")
-    ) {
-        printf("warning: assembly code file does not end with .as, .s, or .lc2k\n");
-    }
-
-    if (!endsWith(outFileString, ".mc")) {
-        printf("error: machine code file must end with .mc\n");
-        exit(1);
-    }
 
     inFilePtr = fopen(inFileString, "r");
     if (inFilePtr == NULL) {
@@ -240,8 +223,8 @@ main(int argc, char **argv)
         exit(1);
     }
 
-    // Check for blank lines in the middle of the code.
     checkForBlankLinesInCode(inFilePtr);
+    checkForInstructionsAfterFill(inFilePtr);
 
     outFilePtr = fopen(outFileString, "w");
     if (outFilePtr == NULL) {
@@ -249,50 +232,172 @@ main(int argc, char **argv)
         exit(1);
     }
 
-    //pass 1
-    uint32_t line_num = 0;
+    // --- PASS 1: Build Defined Label Table and Calculate Section Sizes ---
+    int currentTextOffset = 0;
+    int currentDataOffset = 0;
+    bool inDataSection = false;
+
     while (readAndParse(inFilePtr, label, opcode, arg0, arg1, arg2)) {
-        // printf("lab: %s, op: %s, 0: %s, 1: %s, 2:%s\n", label, opcode, arg0, arg1, arg2);
-        addLabel(label, line_num);
-        ++line_num;
+        // Determine section based on .fill
+        if (!strcmp(opcode, ".fill")) {
+            inDataSection = true;
+        }
+
+        if (label[0] != '\0') {
+            if (inDataSection) {
+                addDefinedLabel(label, currentDataOffset, 'D');
+                // Defined Global labels in Data section go to Symbol Table
+                if (isGlobalLabel(label)) {
+                    addSymbolToTable(label, 'D', currentDataOffset);
+                }
+            } else {
+                addDefinedLabel(label, currentTextOffset, 'T');
+                // Defined Global labels in Text section go to Symbol Table
+                if (isGlobalLabel(label)) {
+                    addSymbolToTable(label, 'T', currentTextOffset);
+                }
+            }
+        }
+
+        if (inDataSection) {
+            currentDataOffset++;
+        } else {
+            currentTextOffset++;
+        }
     }
 
-    //pass 2
+    // --- PASS 2: Generate Code and Tables ---
     rewind(inFilePtr);
-    line_num = 0;
+
+    // Reset offsets for tracking
+    int textPC = 0;
+    int dataPC = 0;
+    inDataSection = false;
+
     while (readAndParse(inFilePtr, label, opcode, arg0, arg1, arg2)) {
-        // printf("lab: %s, op: %s, 0: %s, 1: %s, 2:%s\n", label, opcode, arg0, arg1, arg2);
         Opcode op = get_op(opcode);
-        if (op == OP_INVALID) abortWithMsg("Invalid Operation/Directive");
+        uint32_t instruct = 0;
 
-        uint32_t instruct;
-        switch (op) {
-            case OP_ADD:
-            case OP_NOR:
-                instruct = assembleRType(op, arg0, arg1, arg2);
-                break;
-            case OP_LW:
-            case OP_SW:
-            case OP_BEQ:
-                instruct = assembleIType(op, arg0, arg1, arg2, line_num);
-                break;
-            case OP_JALR:
-                instruct = assembleJType(op, arg0, arg1);
-                break;
-            case OP_HALT:
-            case OP_NOOP:
-                instruct = assembleOType(op);
-                break;
-            case DIR_FILL:
-                instruct = assembleFill(op, arg0);
-                break;
-            default:
-                abortWithMsg("Unreachable");
-                return 1;
+        if (op == DIR_FILL) {
+            inDataSection = true;
+            int fillVal = 0;
 
+            if (isNumber(arg0)) {
+                long long data = strtoll(arg0, NULL, 0);
+                if (data < INT32_MIN || data > UINT32_MAX) abortWithMsg("Fill Value Out of Range");
+                fillVal = (int)data;
+            } else {
+                // Label used in .fill
+                DefinedLabel* def = findDefinedLabel(arg0);
+
+                if (def) {
+                    // Defined (Local or Global)
+                    fillVal = def->offset;
+
+                    if (def->section == 'T') {
+                        fillVal = def->offset;
+                    } else {
+                        fillVal = currentTextOffset + def->offset;
+                    }
+
+                    addRelocation(dataPC, ".fill", arg0);
+
+                } else if (isGlobalLabel(arg0)) {
+                    // Undefined Global
+                    fillVal = 0;
+                    addSymbolToTable(arg0, 'U', 0);
+                    addRelocation(dataPC, ".fill", arg0);
+                } else {
+                     abortWithMsg("Undefined Local Label in .fill");
+                }
+            }
+            instruct = assembleFill(fillVal);
+            dataSegment[dataSize++] = instruct;
+            dataPC++;
+
+        } else {
+            // Text Section Instructions
+            switch (op) {
+                case OP_ADD:
+                case OP_NOR:
+                    instruct = assembleRType(op, arg0, arg1, arg2);
+                    break;
+                case OP_JALR:
+                    instruct = assembleJType(op, arg0, arg1);
+                    break;
+                case OP_HALT:
+                case OP_NOOP:
+                    instruct = assembleOType(op);
+                    break;
+                case OP_LW:
+                case OP_SW:
+                case OP_BEQ: {
+                    int offsetVal = 0;
+                    if (isNumber(arg2)) {
+                        offsetVal = strtol(arg2, NULL, 0);
+                    } else {
+                        DefinedLabel* def = findDefinedLabel(arg2);
+
+                        if (op == OP_BEQ) {
+                            if (!def) {
+                                abortWithMsg("beq label must be defined locally");
+                            }
+
+                            int targetAddr = (def->section == 'T') ? def->offset : (currentTextOffset + def->offset);
+                            int pcAddr = textPC;
+                            offsetVal = targetAddr - pcAddr - 1;
+
+                        } else {
+                            if (def) {
+                                if (def->section == 'T') {
+                                    offsetVal = def->offset;
+                                } else {
+                                    offsetVal = currentTextOffset + def->offset;
+                                }
+                                addRelocation(textPC, opcode, arg2);
+                            } else if (isGlobalLabel(arg2)) {
+                                offsetVal = 0;
+                                addSymbolToTable(arg2, 'U', 0);
+                                addRelocation(textPC, opcode, arg2);
+                            } else {
+                                abortWithMsg("Undefined Local Label");
+                            }
+                        }
+                    }
+                    instruct = assembleIType(op, arg0, arg1, offsetVal);
+                    break;
+                }
+                default:
+                    abortWithMsg("Unreachable");
+            }
+            textSegment[textSize++] = instruct;
+            textPC++;
         }
-        printHexToFile(outFilePtr, instruct);
-        ++line_num;
+    }
+
+    // --- Output Object File ---
+
+    // 1. Header
+    fprintf(outFilePtr, "%d %d %d %d\n", textSize, dataSize, symbolTableSize, relocationTableSize);
+
+    // 2. Text
+    for (int i = 0; i < textSize; i++) {
+        fprintf(outFilePtr, "0x%08X\n", textSegment[i]);
+    }
+
+    // 3. Data
+    for (int i = 0; i < dataSize; i++) {
+        fprintf(outFilePtr, "0x%08X\n", dataSegment[i]);
+    }
+
+    // 4. Symbol Table
+    for (int i = 0; i < symbolTableSize; i++) {
+        fprintf(outFilePtr, "%s %c %d\n", symbolTable[i].name, symbolTable[i].type, symbolTable[i].offset);
+    }
+
+    // 5. Relocation Table
+    for (int i = 0; i < relocationTableSize; i++) {
+        fprintf(outFilePtr, "%d %s %s\n", relocationTable[i].offset, relocationTable[i].opcode, relocationTable[i].label);
     }
 
     fclose(inFilePtr);
@@ -321,8 +426,6 @@ static int lineIsBlank(char *line) {
     return !nonempty_line;
 }
 
-// Exits 2 if file contains an empty line anywhere other than at the end of the file.
-// Note calling this function rewinds inFilePtr.
 static void checkForBlankLinesInCode(FILE *inFilePtr) {
     char line[MAXLINELENGTH];
     int blank_line_encountered = 0;
@@ -330,13 +433,10 @@ static void checkForBlankLinesInCode(FILE *inFilePtr) {
     rewind(inFilePtr);
 
     for(int address = 0; fgets(line, MAXLINELENGTH, inFilePtr) != NULL; ++address) {
-        // Check for line too long
         if (strlen(line) >= MAXLINELENGTH-1) {
             printf("error: line too long\n");
             exit(1);
         }
-
-        // Check for blank line.
         if(lineIsBlank(line)) {
             if(!blank_line_encountered) {
                 blank_line_encountered = 1;
@@ -352,92 +452,63 @@ static void checkForBlankLinesInCode(FILE *inFilePtr) {
     rewind(inFilePtr);
 }
 
+static void checkForInstructionsAfterFill(FILE *inFilePtr) {
+    char label[MAXLINELENGTH], opcode[MAXLINELENGTH], arg0[MAXLINELENGTH],
+         arg1[MAXLINELENGTH], arg2[MAXLINELENGTH];
+    int fill_section_started = 0;
+    int address_of_first_fill = 0;
+    rewind(inFilePtr);
 
-/*
-* NOTE: The code defined below is not to be modifed as it is implimented correctly.
-*/
+    for(int address = 0; readAndParse(inFilePtr, label, opcode, arg0, arg1, arg2); ++address) {
+        if (!strcmp(opcode, ".fill")) {
+            if (!fill_section_started) {
+                fill_section_started = 1;
+                address_of_first_fill = address;
+            }
+        } else {
+            if (fill_section_started) {
+                printf("Invalid Assembly: non-.fill instruction \"%s\" at address %d after .fill at address %d\n",
+                       opcode, address, address_of_first_fill);
+                exit(2);
+            }
+        }
+    }
+    rewind(inFilePtr);
+}
 
-/*
- * Read and parse a line of the assembly-language file.  Fields are returned
- * in label, opcode, arg0, arg1, arg2 (these strings must have memory already
- * allocated to them).
- *
- * Return values:
- *     0 if reached end of file
- *     1 if all went well
- *
- * exit(1) if line is too long.
- */
-int
-readAndParse(FILE *inFilePtr, char *label, char *opcode, char *arg0,
+int readAndParse(FILE *inFilePtr, char *label, char *opcode, char *arg0,
     char *arg1, char *arg2)
 {
     char line[MAXLINELENGTH];
     char *ptr = line;
 
-    /* delete prior values */
     label[0] = opcode[0] = arg0[0] = arg1[0] = arg2[0] = '\0';
 
-    /* read the line from the assembly-language file */
     if (fgets(line, MAXLINELENGTH, inFilePtr) == NULL) {
-	/* reached end of file */
         return(0);
     }
-
-    /* check for line too long */
     if (strlen(line) == MAXLINELENGTH-1) {
-	printf("error: line too long\n");
-	exit(1);
+        printf("error: line too long\n");
+        exit(1);
     }
-
-    // Ignore blank lines at the end of the file.
     if(lineIsBlank(line)) {
         return 0;
     }
 
-    /* is there a label? */
     ptr = line;
     if (sscanf(ptr, "%[^\t\n ]", label)) {
-	/* successfully read label; advance pointer over the label */
         ptr += strlen(label);
     }
 
-    /*
-     * Parse the rest of the line.  Would be nice to have real regular
-     * expressions, but scanf will suffice.
-     */
     sscanf(ptr, "%*[\t\n\r ]%[^\t\n\r ]%*[\t\n\r ]%[^\t\n\r ]%*[\t\n\r ]%[^\t\n\r ]%*[\t\n\r ]%[^\t\n\r ]",
         opcode, arg0, arg1, arg2);
 
     return(1);
 }
 
-static inline int
-isNumber(char *string)
+static inline int isNumber(char *string)
 {
     int num;
     char c;
     return((sscanf(string, "%d%c",&num, &c)) == 1);
-}
-
-
-// Prints a machine code word in the proper hex format to the file
-static inline void
-printHexToFile(FILE *outFilePtr, int word) {
-    fprintf(outFilePtr, "0x%08X\n", word);
-}
-
-// Returns 1 if string ends with substr, 0 otherwise
-static int
-endsWith(char *string, char *substr) {
-    size_t stringLen = strlen(string);
-    size_t substrLen = strlen(substr);
-    if (stringLen < substrLen) {
-        return 0; // string too short
-    }
-    char *stringEnd = string + stringLen - substrLen;
-    if (strcmp(stringEnd, substr) == 0) {
-        return 1;
-    }
-    return 0;
 }
