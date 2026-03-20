@@ -1,0 +1,13 @@
+CREATE t1 2 int string id val
+INSERT INTO t1 4 ROWS
+1 A
+2 B
+3 C
+4 D
+GENERATE FOR t1 hash INDEX ON id
+DELETE FROM t1 WHERE val = B
+PRINT FROM t1 2 id val WHERE id = 3
+GENERATE FOR t1 bst INDEX ON id
+DELETE FROM t1 WHERE val = D
+PRINT FROM t1 2 id val WHERE id > 0
+QUIT

@@ -1,0 +1,22 @@
+# GENERATE hash then INSERT — new rows must be added to the index
+CREATE items 2 string int category qty
+INSERT INTO items 4 ROWS
+food 10
+tools 5
+food 20
+clothing 8
+GENERATE FOR items hash INDEX ON category
+INSERT INTO items 3 ROWS
+food 15
+tools 12
+food 25
+PRINT FROM items 1 qty WHERE category = food
+PRINT FROM items 1 qty WHERE category = tools
+PRINT FROM items 1 qty WHERE category = clothing
+INSERT INTO items 2 ROWS
+clothing 30
+food 5
+GENERATE FOR items bst INDEX ON qty
+PRINT FROM items 1 category WHERE qty > 15
+PRINT FROM items 1 category WHERE qty < 10
+QUIT

@@ -1,0 +1,16 @@
+CREATE inventory 3 string int bool category qty in_stock
+INSERT INTO inventory 8 ROWS
+tools 50 true
+food 100 true
+tools 30 false
+clothing 75 true
+food 20 false
+tools 10 true
+clothing 40 true
+food 60 true
+GENERATE FOR inventory hash INDEX ON category
+DELETE FROM inventory WHERE in_stock = false
+PRINT FROM inventory 2 category qty WHERE category = food
+PRINT FROM inventory 2 category qty WHERE category = tools
+PRINT FROM inventory 2 category qty WHERE category = clothing
+QUIT

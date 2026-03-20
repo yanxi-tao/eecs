@@ -1,0 +1,11 @@
+CREATE bounds 2 int string id val
+INSERT INTO bounds 3 ROWS
+10 ten
+20 twenty
+30 thirty
+GENERATE FOR bounds bst INDEX ON id
+PRINT FROM bounds 2 id val WHERE id < 5
+PRINT FROM bounds 2 id val WHERE id > 50
+PRINT FROM bounds 2 id val WHERE id > 15
+PRINT FROM bounds 2 id val WHERE id < 25
+QUIT

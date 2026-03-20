@@ -1,0 +1,14 @@
+CREATE types 3 double bool string d b s
+INSERT INTO types 4 ROWS
+1.5 true A
+2.0 false B
+1.5 false C
+3.1 true D
+GENERATE FOR types bst INDEX ON d
+PRINT FROM types 3 d b s WHERE d = 1.5
+GENERATE FOR types hash INDEX ON b
+PRINT FROM types 3 d b s WHERE b = false
+PRINT FROM types 3 d b s WHERE b = true
+GENERATE FOR types hash INDEX ON d
+PRINT FROM types 3 d b s WHERE d = 2.0
+QUIT

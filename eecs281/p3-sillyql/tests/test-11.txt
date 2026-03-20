@@ -1,0 +1,15 @@
+CREATE good 3 int string double id name score
+INSERT INTO good 4 ROWS
+1 Alice 90.0
+2 Bob 85.0
+3 Carol 95.0
+4 Dave 70.0
+PRINT FROM bad_table 1 id ALL
+PRINT FROM good 1 name ALL
+DELETE FROM good WHERE fake_col = 1
+PRINT FROM good 1 id ALL
+PRINT FROM good 3 id name BAD_COL WHERE id > 0
+PRINT FROM good 2 name score ALL
+XYZZY
+PRINT FROM good 1 id WHERE id > 2
+QUIT

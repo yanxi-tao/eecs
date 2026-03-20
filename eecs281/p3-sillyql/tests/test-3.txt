@@ -1,0 +1,19 @@
+CREATE scores 3 string int bool player score active
+INSERT INTO scores 6 ROWS
+Alice 100 true
+Bob 200 true
+Carol 150 false
+Dave 200 true
+Eve 50 false
+Frank 200 true
+DELETE FROM scores WHERE score = 200
+PRINT FROM scores 2 player score ALL
+DELETE FROM scores WHERE active = false
+PRINT FROM scores 1 player ALL
+INSERT INTO scores 3 ROWS
+Grace 175 true
+Heidi 90 false
+Ivan 175 true
+DELETE FROM scores WHERE score > 100
+PRINT FROM scores 2 player score ALL
+QUIT

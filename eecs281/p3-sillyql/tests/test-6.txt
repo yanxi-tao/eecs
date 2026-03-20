@@ -1,0 +1,18 @@
+# JOIN with 0 matches and same-name columns across tables
+CREATE a 2 int string id name
+CREATE b 2 int string id name
+INSERT INTO a 3 ROWS
+1 Alice
+2 Bob
+3 Carol
+INSERT INTO b 3 ROWS
+10 Dave
+20 Eve
+30 Frank
+JOIN a AND b WHERE id = id AND PRINT 2 name 1 name 2
+JOIN a AND b WHERE id = id AND PRINT 1 id 1
+INSERT INTO b 2 ROWS
+2 George
+1 Heidi
+JOIN a AND b WHERE id = id AND PRINT 2 id 1 name 2
+QUIT

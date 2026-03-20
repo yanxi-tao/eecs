@@ -1,0 +1,20 @@
+# String BST ordering — must be strict lexicographic; ties by insertion order
+# Also tests BST > and < on strings (catches wrong string comparison)
+CREATE words 2 string int word val
+INSERT INTO words 10 ROWS
+banana 2
+apple 1
+cherry 3
+apricot 4
+blueberry 5
+avocado 6
+cranberry 7
+almond 8
+apricot 9
+apple 10
+GENERATE FOR words bst INDEX ON word
+PRINT FROM words 2 word val WHERE word > apple
+PRINT FROM words 2 word val WHERE word < cherry
+PRINT FROM words 2 word val WHERE word = apricot
+PRINT FROM words 2 word val WHERE word = apple
+QUIT

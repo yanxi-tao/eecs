@@ -1,0 +1,18 @@
+CREATE products 3 int string double id category price
+INSERT INTO products 10 ROWS
+1 electronics 299.99
+2 food 4.99
+3 electronics 599.99
+4 clothing 49.99
+5 food 12.99
+6 electronics 149.99
+7 clothing 89.99
+8 food 3.49
+9 electronics 999.99
+10 clothing 24.99
+GENERATE FOR products hash INDEX ON category
+PRINT FROM products 2 id price WHERE category = electronics
+PRINT FROM products 2 id price WHERE category = food
+PRINT FROM products 2 id price WHERE category = clothing
+PRINT FROM products 1 id WHERE category = toys
+QUIT

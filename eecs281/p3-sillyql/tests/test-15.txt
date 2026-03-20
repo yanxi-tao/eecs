@@ -1,0 +1,20 @@
+CREATE mix 2 int string id val
+INSERT INTO mix 5 ROWS
+10 A
+20 B
+30 C
+40 D
+50 E
+GENERATE FOR mix bst INDEX ON id
+DELETE FROM mix WHERE id = 30
+DELETE FROM mix WHERE id = 10
+INSERT INTO mix 2 ROWS
+30 C2
+10 A2
+PRINT FROM mix 2 id val WHERE id > 15
+GENERATE FOR mix hash INDEX ON id
+DELETE FROM mix WHERE id = 50
+INSERT INTO mix 1 ROWS
+50 E2
+PRINT FROM mix 2 id val WHERE id = 50
+QUIT

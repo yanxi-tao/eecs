@@ -1,0 +1,13 @@
+CREATE t1 1 int id
+CREATE t2 1 int id
+JOIN t1 AND t2 WHERE id = id AND PRINT 2 id 1 id 2
+INSERT INTO t1 2 ROWS
+1
+2
+JOIN t1 AND t2 WHERE id = id AND PRINT 2 id 1 id 2
+INSERT INTO t2 2 ROWS
+2
+3
+JOIN t1 AND t2 WHERE id = id AND PRINT 2 id 1 id 2
+JOIN t1 AND t1 WHERE id = id AND PRINT 2 id 1 id 2
+QUIT

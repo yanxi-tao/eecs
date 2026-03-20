@@ -1,0 +1,19 @@
+CREATE log 2 int string id msg
+INSERT INTO log 5 ROWS
+1 first
+2 second
+3 third
+4 fourth
+5 fifth
+DELETE FROM log WHERE id < 3
+INSERT INTO log 3 ROWS
+6 sixth
+7 seventh
+8 eighth
+PRINT FROM log 2 id msg ALL
+DELETE FROM log WHERE id = 7
+INSERT INTO log 2 ROWS
+9 ninth
+10 tenth
+PRINT FROM log 2 id msg ALL
+QUIT
