@@ -5,6 +5,7 @@
  * Make sure NOT to modify printState or any of the associated functions
 **/
 
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -123,6 +124,17 @@ int main(int argc, char *argv[]) {
 
     /* ------------ Initialize State ------------ */
 
+    state.pc = 0;
+    state.cycles = 0;
+    for (size_t i = 0; i < NUMREGS; ++i) {
+        state.reg[i] = 0;
+    }
+    state.IFID.instr = NOOPINSTR;
+    state.IDEX.instr = NOOPINSTR;
+    state.EXMEM.instr = NOOPINSTR;
+    state.MEMWB.instr = NOOPINSTR;
+    state.WBEND.instr = NOOPINSTR;
+
     /* ------------------- END ------------------ */
 
     newState = state;
@@ -134,18 +146,60 @@ int main(int argc, char *argv[]) {
 
         /* ---------------------- IF stage --------------------- */
 
+        if (opcode(state.EXMEM.instr) == BEQ && state.EXMEM.eq) {
+            newState.IFID.instr = state.instrMem[state.EXMEM.branchTarget];
+            newState.IFID.pcPlus1 = newState.pc = state.EXMEM.branchTarget + 1;
+        } else {
+            newState.IFID.instr = state.instrMem[state.pc];
+            newState.pc = state.pc + 1;
+            newState.IFID.pcPlus1 = state.pc + 1;
+        }
 
         /* ---------------------- ID stage --------------------- */
 
+        newState.IDEX.instr = state.IFID.instr;
+        newState.IDEX.pcPlus1 = state.IFID.pcPlus1;
+        newState.IDEX.valA = state.reg[field0(state.IFID.instr)];
+        newState.IDEX.valB = state.reg[field1(state.IFID.instr)];
+        newState.IDEX.offset = convertNum(field2(state.IFID.instr));
 
         /* ---------------------- EX stage --------------------- */
 
+        newState.EXMEM.instr = state.IDEX.instr;
+        newState.EXMEM.branchTarget = state.IDEX.pcPlus1 + state.IDEX.offset;
+        newState.EXMEM.valB = state.IDEX.valB;
+        newState.EXMEM.eq = state.IDEX.valA == state.IDEX.valB;
+        int op = opcode(state.IDEX.instr);
+        if (op == LW || op == SW) {
+            newState.EXMEM.aluResult = state.IDEX.valA + state.IDEX.offset;
+        } else if (op == NOR) {
+            newState.EXMEM.aluResult = ~(state.IDEX.valA | state.IDEX.valB);
+        } else {
+            newState.EXMEM.aluResult = state.IDEX.valA + state.IDEX.valB;
+        }
 
         /* --------------------- MEM stage --------------------- */
 
+        newState.MEMWB.instr = state.EXMEM.instr;
+        op = opcode(state.EXMEM.instr);
+        if (op == LW) {
+            newState.MEMWB.writeData = state.dataMem[state.EXMEM.aluResult];
+        } else if (op == SW) {
+            newState.dataMem[state.EXMEM.aluResult] = state.EXMEM.valB;
+        } else {
+            newState.MEMWB.writeData = state.EXMEM.aluResult;
+        }
 
         /* ---------------------- WB stage --------------------- */
 
+        newState.WBEND.instr = state.MEMWB.instr;
+        newState.WBEND.writeData = state.MEMWB.writeData;
+        op = opcode(state.MEMWB.instr);
+        if (op == ADD || op == NOR) {
+            newState.reg[field2(state.MEMWB.instr)] = state.MEMWB.writeData;
+        } else if (op == LW) {
+            newState.reg[field1(state.MEMWB.instr)] = state.MEMWB.writeData;
+        }
 
         /* ------------------------ END ------------------------ */
         state = newState; /* this is the last statement before end of the loop. It marks the end
@@ -213,7 +267,7 @@ void printState(stateType *statePtr) {
         printf(" (Don't Care)");
     }
     printf("\n");
-    
+
     // ID/EX
     int idexOp = opcode(statePtr->IDEX.instr);
     printf("\tID/EX pipeline register:\n");
@@ -278,7 +332,7 @@ void printState(stateType *statePtr) {
     if (memwbOp >= SW || memwbOp < 0) {
         printf(" (Don't Care)");
     }
-    printf("\n");     
+    printf("\n");
 
     // WB/END
 	int wbendOp = opcode(statePtr->WBEND.instr);
@@ -313,7 +367,7 @@ void readMachineCode(stateType *state, char* filename) {
             printf("error in reading address %d\n", state->numMemory);
             exit(1);
         }
-        printf("\tinstrMem[ %d ] = 0x%08X ( ", state->numMemory, 
+        printf("\tinstrMem[ %d ] = 0x%08X ( ", state->numMemory,
             state->instrMem[state->numMemory]);
         printInstruction(state->dataMem[state->numMemory] = state->instrMem[state->numMemory]);
         printf(" )\n");
