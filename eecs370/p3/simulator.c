@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 // Machine Definitions
 #define NUMMEMORY 65536 // maximum number of data words in memory
@@ -102,9 +103,31 @@ static inline int convertNum(int num) {
     return num - ( (num & (1<<15)) ? 1<<16 : 0 );
 }
 
+static inline int getDestReg(int instruction) {
+    if (opcode(instruction) == ADD || opcode(instruction) == NOR) {
+        return field2(instruction);
+    } else if (opcode(instruction) == LW) {
+        return field1(instruction);
+    } else {
+        return -1;
+    }
+}
+
+static inline bool readField0(int instruction) {
+    int op = opcode(instruction);
+    return (op == ADD || op == NOR || op == LW || op == SW || op == BEQ);
+}
+
+static inline bool readField1(int instruction) {
+    int op = opcode(instruction);
+    return (op == ADD || op == NOR || op == SW || op == BEQ);
+}
+
 void printState(stateType*);
 void printInstruction(int);
 void readMachineCode(stateType*, char*);
+int getLatestRegValue(int, stateType*);
+bool detectLwStall(int, int);
 
 
 int main(int argc, char *argv[]) {
@@ -143,62 +166,99 @@ int main(int argc, char *argv[]) {
         printState(&state);
 
         newState.cycles += 1;
+        bool isStalled = detectLwStall(state.IFID.instr, state.IDEX.instr);
+        bool isBranchTaken = opcode(state.EXMEM.instr) == BEQ && state.EXMEM.eq;
 
         /* ---------------------- IF stage --------------------- */
 
-        if (opcode(state.EXMEM.instr) == BEQ && state.EXMEM.eq) {
-            newState.IFID.instr = state.instrMem[state.EXMEM.branchTarget];
-            newState.IFID.pcPlus1 = newState.pc = state.EXMEM.branchTarget + 1;
-        } else {
-            newState.IFID.instr = state.instrMem[state.pc];
-            newState.pc = state.pc + 1;
-            newState.IFID.pcPlus1 = state.pc + 1;
+        {
+            if (isBranchTaken) {
+                newState.IFID.instr = NOOPINSTR;
+                newState.IFID.pcPlus1 = 0;
+                newState.pc = state.EXMEM.branchTarget;
+            } else if (isStalled) {
+                newState.pc = state.pc;
+                newState.IFID = state.IFID;
+            } else {
+                newState.IFID.instr = state.instrMem[state.pc];
+                newState.pc = state.pc + 1;
+                newState.IFID.pcPlus1 = state.pc + 1;
+            }
         }
 
         /* ---------------------- ID stage --------------------- */
 
-        newState.IDEX.instr = state.IFID.instr;
-        newState.IDEX.pcPlus1 = state.IFID.pcPlus1;
-        newState.IDEX.valA = state.reg[field0(state.IFID.instr)];
-        newState.IDEX.valB = state.reg[field1(state.IFID.instr)];
-        newState.IDEX.offset = convertNum(field2(state.IFID.instr));
+        {
+            if (isStalled || isBranchTaken) {
+                newState.IDEX.instr = NOOPINSTR;
+                newState.IDEX.pcPlus1 = 0;
+                newState.IDEX.valA = 0;
+                newState.IDEX.valB = 0;
+                newState.IDEX.offset = 0;
+            } else {
+                newState.IDEX.instr = state.IFID.instr;
+                newState.IDEX.pcPlus1 = state.IFID.pcPlus1;
+                newState.IDEX.valA = state.reg[field0(state.IFID.instr)];
+                newState.IDEX.valB = state.reg[field1(state.IFID.instr)];
+                newState.IDEX.offset = convertNum(field2(state.IFID.instr));
+            }
+        }
 
         /* ---------------------- EX stage --------------------- */
 
-        newState.EXMEM.instr = state.IDEX.instr;
-        newState.EXMEM.branchTarget = state.IDEX.pcPlus1 + state.IDEX.offset;
-        newState.EXMEM.valB = state.IDEX.valB;
-        newState.EXMEM.eq = state.IDEX.valA == state.IDEX.valB;
-        int op = opcode(state.IDEX.instr);
-        if (op == LW || op == SW) {
-            newState.EXMEM.aluResult = state.IDEX.valA + state.IDEX.offset;
-        } else if (op == NOR) {
-            newState.EXMEM.aluResult = ~(state.IDEX.valA | state.IDEX.valB);
-        } else {
-            newState.EXMEM.aluResult = state.IDEX.valA + state.IDEX.valB;
+        {
+            if (isBranchTaken) {
+                newState.EXMEM.instr = NOOPINSTR;
+                newState.EXMEM.branchTarget = 0;
+                newState.EXMEM.aluResult = 0;
+                newState.EXMEM.eq = 0;
+                newState.EXMEM.valB = 0;
+            } else {
+                newState.EXMEM.instr = state.IDEX.instr;
+                newState.EXMEM.branchTarget = state.IDEX.pcPlus1 + state.IDEX.offset;
+
+                int alu1 = getLatestRegValue(field0(state.IDEX.instr), &state);
+                int alu2 = getLatestRegValue(field1(state.IDEX.instr), &state);
+                newState.EXMEM.eq = alu1 == alu2;
+                newState.EXMEM.valB = alu2;
+
+                int op = opcode(state.IDEX.instr);
+                if (op == LW || op == SW) {
+                    newState.EXMEM.aluResult = alu1 + state.IDEX.offset;
+                } else if (op == NOR) {
+                    newState.EXMEM.aluResult = ~(alu1 | alu2);
+                } else {
+                    newState.EXMEM.aluResult = alu1 + alu2;
+                }
+            }
         }
 
         /* --------------------- MEM stage --------------------- */
 
-        newState.MEMWB.instr = state.EXMEM.instr;
-        op = opcode(state.EXMEM.instr);
-        if (op == LW) {
-            newState.MEMWB.writeData = state.dataMem[state.EXMEM.aluResult];
-        } else if (op == SW) {
-            newState.dataMem[state.EXMEM.aluResult] = state.EXMEM.valB;
-        } else {
-            newState.MEMWB.writeData = state.EXMEM.aluResult;
+        {
+            newState.MEMWB.instr = state.EXMEM.instr;
+
+            int op = opcode(state.EXMEM.instr);
+
+            if (op == LW) {
+                newState.MEMWB.writeData = state.dataMem[state.EXMEM.aluResult];
+            } else if (op == SW) {
+                newState.dataMem[state.EXMEM.aluResult] = state.EXMEM.valB;
+            } else {
+                newState.MEMWB.writeData = state.EXMEM.aluResult;
+            }
         }
 
         /* ---------------------- WB stage --------------------- */
 
-        newState.WBEND.instr = state.MEMWB.instr;
-        newState.WBEND.writeData = state.MEMWB.writeData;
-        op = opcode(state.MEMWB.instr);
-        if (op == ADD || op == NOR) {
-            newState.reg[field2(state.MEMWB.instr)] = state.MEMWB.writeData;
-        } else if (op == LW) {
-            newState.reg[field1(state.MEMWB.instr)] = state.MEMWB.writeData;
+        {
+            newState.WBEND.instr = state.MEMWB.instr;
+            newState.WBEND.writeData = state.MEMWB.writeData;
+
+            int destReg = getDestReg(state.MEMWB.instr);
+            if (destReg != -1) {
+                newState.reg[destReg] = state.MEMWB.writeData;
+            }
         }
 
         /* ------------------------ END ------------------------ */
@@ -209,6 +269,41 @@ int main(int argc, char *argv[]) {
     printf("Total of %d cycles executed\n", state.cycles);
     printf("Final state of machine:\n");
     printState(&state);
+}
+
+int getLatestRegValue(int regX, stateType* state) {
+
+    if (regX == getDestReg(state->EXMEM.instr) && opcode(state->EXMEM.instr) != LW) {
+        return state->EXMEM.aluResult;
+    }
+
+    if (regX == getDestReg(state->MEMWB.instr)) {
+        return state->MEMWB.writeData;
+    }
+
+    if (regX == getDestReg(state->WBEND.instr)) {
+        return state->WBEND.writeData;
+    }
+
+    return state->reg[regX];
+}
+
+bool detectLwStall(int ifidInst, int idexInst) {
+    if (opcode(idexInst) != LW) {
+        return false;
+    }
+
+    int loadDest = field1(idexInst);
+
+    if (readField0(ifidInst) && field0(ifidInst) == loadDest) {
+        return true;
+    }
+
+    if (readField1(ifidInst) && field1(ifidInst) == loadDest) {
+        return true;
+    }
+
+    return false;
 }
 
 /*
